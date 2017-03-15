@@ -104,6 +104,7 @@ def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trai
     batches = [normalizedData[:, (i * batchSize):((i + 1) * batchSize)] for i in xrange(numBatches)]
 
     autoEncoder = AutoEncoder(segmentLength,  20 if segmentLength / compressionFactor < 20 else segmentLength / compressionFactor)
+    print "Training Autoencoder..."
     autoEncoder.train(batches, trainingEpochs)
 
     encoded = np.ndarray((1, 0))
@@ -121,7 +122,7 @@ def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trai
 
     errorMatrix = findErrorMatrix(dataInput, decoded)
 
-    return encoded, errorMatrix, leftOverMatrix
+    return encoded, autoEncoder, errorMatrix, leftOverMatrix
 
 
 def encodeBasesData(dataInput, leftOverMatrix):
@@ -143,5 +144,13 @@ def encodeGapsData(dataInput, leftOverMatrix):
     """
     return encodeData(dataInput, leftOverMatrix, GAPS_SEGMENT_LENGTH, GAPS_COMPRESSION_FACTOR, GAPS_TRAINING_EPOCHS, GAPS_SEGMENT_LENGTH)
 
-enc, err, leftOverMatrix = encodeBasesData(*getBasesData('bases2'))
-print len(err)
+if __name__ == "__main__":
+    # Only bases data for now
+    filename = raw_input("Name of the file that will be compressed: ")
+    encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeBasesData(*getBasesData(filename))
+    accuracy = 100 - ((len(errorMatrix) / float(encodedData.encoded.shape[1] * BASES_COMPRESSION_FACTOR)) * 100)
+    print "Compressed with {0:.3f} percent accuracy".format(accuracy)
+    np.save('encodedData.npy', encodedData.encoded)
+    np.save('encoder.npy', autoEncoder.decoderWeights.astype(np.float16))
+    np.save('errorMatrix.npy', errorMatrix)
+    np.save('leftOverMatrix.npy', leftOverMatrix)
