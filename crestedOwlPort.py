@@ -3,7 +3,7 @@ import numpy as np
 from scipy.special import expit  # expit = logistic function
 
 # tuneable values
-GAPS_SEGMENT_LENGTH = 4000
+GAPS_SEGMENT_LENGTH =  16000
 BASES_SEGMENT_LENGTH = 16000
 
 
