@@ -1,16 +1,17 @@
 import vcf
 
-#parse de-compressed VCF file -- thousand.vcf
-#then generate gaps and bases for compressor to use
-#generate verify file that has SNP and Indel's locations, REF and ALT. This can be used to verify compress/uncompress result
-#generate probability file distances that has the probabilty for each gap/SNP type. Can be used for probability based compression
+# parse de-compressed VCF file -- thousand.vcf
+# then generate gaps and bases for compressor to use
+# generate verify file that has SNP and Indel's locations, REF and ALT. This can be used to verify compress/uncompress result
+# generate probability file distances that has the probabilty for each gap/SNP type. Can be used for probability based compression
 
-#Iput: entries specifies how many entries need to be generated, at least 2000
+# Input: entries specifies how many entries need to be generated, at least 2000
 def prep(entries):
     #get at least 2000 entries to get meaningful stats
     if(entries<2000):
         entries = 2000
-    vcf_reader = vcf.Reader(open('thousand.vcf', 'r'))
+    filename = raw_input("What is the name of the VCF file?")
+    vcf_reader = vcf.Reader(open(filename, 'r'))
 
     count = 0
     size_err = 0
@@ -18,6 +19,7 @@ def prep(entries):
     snp_stats = {'AC':0, 'AG':0, 'AT':0, 'CA':0, 'CG':0, 'CT':0,
              'GA':0, 'GC':0, 'GT':0, 'TA':0, 'TC':0, 'TG':0, 'OT':0} #OT for all other types not listed
     dist = [] #all distances beween two neighboring SNPs
+
     for x in range(100000):
         dist.append({'AC':0, 'AG':0, 'AT':0, 'CA':0, 'CG':0, 'CT':0,
              'GA':0, 'GC':0, 'GT':0, 'TA':0, 'TC':0, 'TG':0, 'OT':0})

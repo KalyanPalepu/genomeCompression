@@ -2,9 +2,9 @@ import tensorflow as tf
 import numpy as np
 from scipy.special import expit  # expit = logistic function
 
-#  tuneable values
+# tuneable values
 GAPS_SEGMENT_LENGTH = 4000
-BASES_SEGMENT_LENGTH = 1000
+BASES_SEGMENT_LENGTH = 16000
 
 
 class AutoEncoder(object):
@@ -12,9 +12,9 @@ class AutoEncoder(object):
         self.inputSize = inputSize
         self.hiddenSize = hiddenSize
         np.random.seed(randomSeed)
-        self.encoderWeights = np.random.randn(self.inputSize, self.hiddenSize).astype(np.float32)
+        self.encoderWeights = np.random.randn(self.inputSize, self.hiddenSize).astype(np.float16)
         np.random.seed(randomSeed)
-        self.decoderWeights = np.random.randn(self.hiddenSize, self.inputSize).astype(np.float32)
+        self.decoderWeights = np.random.randn(self.hiddenSize, self.inputSize).astype(np.float16)
 
     def encode(self, data):
         """
@@ -33,35 +33,40 @@ class AutoEncoder(object):
         """
         return expit(np.dot(data, self.decoderWeights))
 
-    def train(self, data, epochs):
+    def train(self, data, epochs, logDirectory='./', regParam=0.01):
         """
         Trains autoencoder to fit the data using TensorFlow
-        loosely based on https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/multilayer_perceptron.py
+        loosely based on hhttps://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/convolutional_network.py
         :param data: array of batches of data to be fit
         :param epochs: number of epochs to run training
+        :param logDirectory: directory where log containing cost is saved
         :return: nothing
         """
         # Convert weights to TensorFlow variable
-        encoderWeightsTF = tf.Variable(self.encoderWeights)
-        decoderWeightsTF = tf.Variable(self.decoderWeights)
+        encoderWeightsTF = tf.Variable(self.encoderWeights.astype(np.float32))  # use float32 for tensorflow compatibility
+        decoderWeightsTF = tf.Variable(self.decoderWeights.astype(np.float32))
 
         x = tf.placeholder(np.float32, [None, self.inputSize])  # placeholder for training data
 
         encoded = tf.nn.sigmoid(tf.matmul(x, encoderWeightsTF))
         decoded = tf.nn.sigmoid(tf.matmul(encoded, decoderWeightsTF))
 
-        costFunction = tf.reduce_mean(tf.pow(x - decoded, 2))
+        costFunction = tf.reduce_mean(tf.pow(x - decoded, 2)) + regParam * tf.nn.l2_loss(encoderWeightsTF) + regParam * tf.nn.l2_loss(decoderWeightsTF)
         optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(costFunction)
         init = tf.global_variables_initializer()
         with tf.Session() as sess:
             sess.run(init)
+            f = open(logDirectory + 'cost', 'w')
             for epoch in xrange(epochs):
                 for batch in data:
                     _, cost = sess.run([optimizer, costFunction], feed_dict={x: batch})
-                if (epoch + 1) % 500 == 0:
+                if (epoch + 1) % 5000 == 0:
                     print "Epoch: {0}, Cost: {1}".format(epoch + 1, cost)
-            self.encoderWeights = encoderWeightsTF.eval()
-            self.decoderWeights = decoderWeightsTF.eval()
+                f.write("{0} {1}\n".format(epoch, cost))
+            f.close()
+            self.encoderWeights = encoderWeightsTF.eval().astype(np.float16)  # use float16 for storage space
+            self.decoderWeights = decoderWeightsTF.eval().astype(np.float16)
+
 
 
 class EncodedData(object):
@@ -87,7 +92,7 @@ def findErrorMatrix(input, reconstructedInput):
         for j in xrange(errorMatrixOriginal.shape[1]):
             if errorMatrixOriginal[i,j] != 0:
                 errorMatrix.append([i, j, errorMatrixOriginal[i, j]])
-
+    del(errorMatrix[0])
     return errorMatrix
 
 
@@ -107,7 +112,7 @@ def simplify(OGComp, zeroThreshold=0.001, oneThreshold=0.99):
             if OGComp[i, j] > oneThreshold:
                 processedComp[i, j] = 1
 
-    return processedComp
+    return processedComp.astype(np.float16)
 
 
 def normalize(data):
