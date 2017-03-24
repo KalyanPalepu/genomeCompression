@@ -2,8 +2,8 @@
 from crestedOwlPort import *
 
 # tuneable values
-GAPS_COMPRESSION_FACTOR = 100
-GAPS_TRAINING_EPOCHS = 10000
+GAPS_COMPRESSION_FACTOR = 60
+GAPS_TRAINING_EPOCHS = 500000
 
 BASES_COMPRESSION_FACTOR = 70
 BASES_TRAINING_EPOCHS = 25000
@@ -38,8 +38,7 @@ def getBasesData(filename):
 
     data = np.ndarray((0, BASES_SEGMENT_LENGTH), dtype=np.float16)
     for segment in xrange(len(convertedData) / BASES_SEGMENT_LENGTH):
-        data = np.vstack(
-            (data, np.asarray(convertedData[(segment * BASES_SEGMENT_LENGTH):((segment + 1) * BASES_SEGMENT_LENGTH)])))
+        data = np.vstack((data, np.asarray(convertedData[(segment * BASES_SEGMENT_LENGTH):((segment + 1) * BASES_SEGMENT_LENGTH)])))
     return data, np.asarray(leftOverMatrix, dtype=np.int8)
 
 
@@ -54,13 +53,13 @@ def getGapsData(filename, segmentLength=GAPS_SEGMENT_LENGTH):
     """
     print "Reading data..."
     f = open(filename)
-    rawData = [int(x.strip()) for x in f.readlines()]
+    rawData = [int(x.strip()) for x in f.readlines() if int(x.strip()) < 100]
     f.close()
     leftOverMatrixIndex = len(rawData) - (len(rawData) % (segmentLength))
-    data = np.ndarray((0, segmentLength))
+    data = np.ndarray((0, segmentLength), dtype=np.float32)
     for segment in xrange(len(rawData[:leftOverMatrixIndex]) / segmentLength):
-        data = np.vstack((data, np.asarray(data[(segment * segmentLength):((segment + 1) * segmentLength)])))
-
+        data = np.vstack((data, np.asarray(rawData[(segment * segmentLength):((segment + 1) * segmentLength)])))
+    print data.shape[0], data.shape[1]
     return data, np.asarray([rawData[leftOverMatrixIndex:]])
 
 
@@ -76,8 +75,7 @@ def decodeData(encodedData, autoEncoder, errorMatrix, leftOverMatrix):
     if encodedData.encoded.shape[1] == 0:
         return np.asarray([[]]), leftOverMatrix
 
-    decoded = np.around(
-        denormalize(autoEncoder.decode(encodedData.encoded), encodedData.minValue, encodedData.maxValue))
+    decoded = np.around(denormalize(autoEncoder.decode(encodedData.encoded), encodedData.minValue, encodedData.maxValue))
 
     for i in xrange(len(errorMatrix)):
         row, col, error = errorMatrix[i]
@@ -104,14 +102,14 @@ def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trai
     print "Normalizing data..."
     normalizedData = normalize(dataInput)
 
-    autoEncoder = AutoEncoder(segmentLength,
-                              20 if (segmentLength / compressionFactor) < 20 else (segmentLength / compressionFactor))
+    autoEncoder = AutoEncoder(segmentLength,  20 if (segmentLength / compressionFactor) < 20 else (segmentLength / compressionFactor))
 
     print "Training autoencoder..."
     autoEncoder.train([normalizedData], trainingEpochs, logDirectory=logDirectory)
 
     print "Encoding data..."
-    encoded = EncodedData(simplify(autoEncoder.encode(normalizedData)), dataInput.min(), dataInput.max())
+    #encoded = EncodedData(simplify(autoEncoder.encode(normalizedData)), dataInput.min(), dataInput.max())
+    encoded = EncodedData(autoEncoder.encode(normalizedData), dataInput.min(), dataInput.max())
 
     print "Generating error matrix..."
     decoded = decodeData(encoded, autoEncoder, [], leftOverMatrix)[0]
@@ -128,8 +126,7 @@ def encodeBasesData(dataInput, leftOverMatrix, logDirectory='./'):
     :param logDirectory: see encodeData()
     :return: see encodeData()
     """
-    return encodeData(dataInput, leftOverMatrix, BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, BASES_TRAINING_EPOCHS,
-                      logDirectory=logDirectory)
+    return encodeData(dataInput, leftOverMatrix, BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, BASES_TRAINING_EPOCHS, logDirectory=logDirectory)
 
 
 def encodeGapsData(dataInput, leftOverMatrix):
@@ -142,43 +139,54 @@ def encodeGapsData(dataInput, leftOverMatrix):
     return encodeData(dataInput, leftOverMatrix, GAPS_SEGMENT_LENGTH, GAPS_COMPRESSION_FACTOR, GAPS_TRAINING_EPOCHS)
 
 
-def gridSearch(segmentLengths, compressionFactors, regParams):
-    filename = raw_input("Name of the file that will be compressed: ")
-    g = open('massiveGridSearch/gridSearchResults', 'w')
-    for regParam in regParams:
-        for segLen in segmentLengths:
-            for compFac in compressionFactors:
-                print "Trying with {0} for segment length, {1} for compression factor, and {2} for reg param".format(segLen, compFac, regParam)
-                BASES_SEGMENT_LENGTH = segLen
-                BASES_COMPRESSION_FACTOR = compFac
-                directoryName = 'massiveGridSearch/' + str(BASES_SEGMENT_LENGTH) + 'x' + str(BASES_COMPRESSION_FACTOR) + '/'
-                if not os.path.exists(directoryName):
-                    os.mkdir(directoryName)
-                data = getBasesData(filename)
-                encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeBasesData(*data, logDirectory=directoryName, regparam=regParam)
-                decoded = decodeData(encodedData, autoEncoder, errorMatrix, leftOverMatrix)
-                assert np.array_equal(data[0], decoded[0])  # make sure compression was lossless
-                accuracy = 100 - ((len(errorMatrix) / float(decoded[0].size)) * 100)
+def gridSearch(segmentLengths, compressionFactors):
+    # segmentLengths = [18000, 17000, 16000]
+    # compressionFactors = [100, 90, 80]
+    g = open('gridSearchResults/gridSearchResults', 'w')
+    for segLen in segmentLengths:
+        for compFac in compressionFactors:
+            print "Trying with {0} for segment length and {1} for compression factor".format(segLen, compFac)
+            BASES_SEGMENT_LENGTH = segLen
+            BASES_COMPRESSION_FACTOR = compFac
+            directoryName = 'gridSearchResults/' + str(BASES_SEGMENT_LENGTH) + 'x' + str(BASES_COMPRESSION_FACTOR) + '/'
+            if not os.path.exists(directoryName):
+                os.mkdir(directoryName)
+            data = getBasesData(filename)
+            encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeBasesData(*data, logDirectory=directoryName)
+            decoded = decodeData(encodedData, autoEncoder, errorMatrix, leftOverMatrix)
+            assert np.array_equal(data[0], decoded[0])  # make sure compression was lossless
+            accuracy = 100 - ((len(errorMatrix) / float(decoded[0].size)) * 100)
 
-                g.write("Compressed with {0} size segments, {1}x compression and {2} reg param at {3:.3f} percent accuracy".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, regParam, accuracy))
-                np.save(directoryName + 'encodedData.npy', encodedData.encoded)
-                np.save(directoryName + 'decoder.npy', autoEncoder.decoderWeights)
-                np.save(directoryName + 'encoder.npy', autoEncoder.encoderWeights)
-                np.save(directoryName + 'errorMatrix.npy', np.asarray(errorMatrix, dtype=np.int8))
-                np.save(directoryName + 'leftOverMatrix.npy', leftOverMatrix.astype(np.int8))
-                f = open(directoryName + 'accuracy', 'w')
-                f.write(str(accuracy))
-                f.close()
+            g.write("Compressed with {0} size segments and {1}x compression at {2:.3f} percent accuracy\n".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, accuracy))
+            np.save(directoryName + 'encodedData.npy', encodedData.encoded)
+            np.save(directoryName + 'decoder.npy', autoEncoder.decoderWeights)
+            np.save(directoryName + 'encoder.npy', autoEncoder.encoderWeights)
+            np.save(directoryName + 'errorMatrix.npy', np.asarray(errorMatrix, dtype=np.int8))
+            np.save(directoryName + 'leftOverMatrix.npy', leftOverMatrix.astype(np.int8))
+            f = open(directoryName + 'accuracy', 'w')
+            f.write(str(accuracy))
+            f.close()
 
-                print "Compressed with {0} size segments, {1}x compression and {2} reg param at {3:.3f} percent accuracy".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, regParam, accuracy)
+            print "Compressed with {0} size segments and {1}x compression at {2:.3f} percent accuracy".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, accuracy)
     g.close()
 
 if __name__ == "__main__":
     import os
     # Only bases data for now
     filename = raw_input("Name of the file that will be compressed: ")
-    data = getBasesData(filename)
-    encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeBasesData(*data)
+    #filename = "bases2"
+    #filename = "gaps"
+    if 'gap' in filename:
+        data = getGapsData(filename)
+        encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeGapsData(*data)
+    elif 'base' in filename:
+        data = getBasesData(filename)
+        encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeBasesData(*data)
+    else:
+        print "file name must have either base or gap in it"
+        os._exit(2)
+
+
     decoded = decodeData(encodedData, autoEncoder, errorMatrix, leftOverMatrix)
 
     assert np.array_equal(data[0], decoded[0])  # make sure compression was lossless
@@ -195,3 +203,4 @@ if __name__ == "__main__":
     np.save(directoryName + 'decoder.npy', autoEncoder.decoderWeights)
     np.save(directoryName + 'errorMatrix.npy', np.asarray(errorMatrix, dtype=np.int8))
     np.save(directoryName + 'leftOverMatrix.npy', leftOverMatrix.astype(np.int8))
+

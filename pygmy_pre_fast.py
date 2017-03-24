@@ -8,8 +8,8 @@ def prep():
     vcf_reader = vcf.Reader(open(filename, 'r'))
 
     count = 0
-    gaps = open("/home/kalyanp/hugeData/gaps.g", 'w')   # all gaps, except the first one is the absolute location
-    bases2 = open("/home/kalyanp/hugeData/bases2.b", 'w')  # both ref and alt bases, 0 for indel
+    gaps = open("hugeData/gaps.g", 'w')   # all gaps, except the first one is the absolute location
+    bases2 = open("hugeData/bases2.b", 'w')  # both ref and alt bases, 0 for indel
     pre_pos = 0
 
     for record in vcf_reader:
@@ -23,16 +23,12 @@ def prep():
 
         if len(record.REF) == 1 and len(record.ALT[0]) == 1:  # counting the polymorphism in the dictionary
             bases2.write(record.REF + str(record.ALT[0]) + '\n')
-
+            gaps.write(str(record.POS - pre_pos))
     gaps.close()
     bases2.close()
 
 
 if __name__ == '__main__':
-    from timeit import default_timer
-    start = default_timer()
     prep()
-    end = default_timer()
-    print "Total Time: {0}".format(end - start)
 
 
