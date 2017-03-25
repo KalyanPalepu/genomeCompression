@@ -3,7 +3,7 @@ import numpy as np
 from scipy.special import expit  # expit = logistic function
 
 # tuneable values
-GAPS_SEGMENT_LENGTH =  16000
+GAPS_SEGMENT_LENGTH = 16000
 BASES_SEGMENT_LENGTH = 16000
 
 
@@ -33,7 +33,7 @@ class AutoEncoder(object):
         """
         return expit(np.dot(data, self.decoderWeights))
 
-    def train(self, data, epochs, logDirectory='./', regParam=0.01):
+    def train(self, data, epochs, logDirectory='./', regularizationParameter=0):
         """
         Trains autoencoder to fit the data using TensorFlow
         loosely based on hhttps://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3_NeuralNetworks/convolutional_network.py
@@ -51,8 +51,10 @@ class AutoEncoder(object):
         encoded = tf.nn.sigmoid(tf.matmul(x, encoderWeightsTF))
         decoded = tf.nn.sigmoid(tf.matmul(encoded, decoderWeightsTF))
 
-        costFunction = tf.reduce_mean(tf.pow(x - decoded, 2)) + regParam * tf.nn.l2_loss(encoderWeightsTF) + regParam * tf.nn.l2_loss(decoderWeightsTF)
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(costFunction)
+        costFunction = tf.reduce_mean(tf.pow(x - decoded, 2)) + \
+                       regularizationParameter / (self.hiddenSize * self.inputSize) * (tf.nn.l2_loss(encoderWeightsTF) + tf.nn.l2_loss(decoderWeightsTF))
+        print "REGPARAM" + str(regularizationParameter)
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.0006).minimize(costFunction)
         init = tf.global_variables_initializer()
         with tf.Session() as sess:
             sess.run(init)
@@ -60,7 +62,7 @@ class AutoEncoder(object):
             for epoch in xrange(epochs):
                 for batch in data:
                     _, cost = sess.run([optimizer, costFunction], feed_dict={x: batch})
-                if (epoch + 1) % 5000 == 0:
+                if (epoch + 1) % 500 == 0:
                     print "Epoch: {0}, Cost: {1}".format(epoch + 1, cost)
                 f.write("{0} {1}\n".format(epoch, cost))
             f.close()

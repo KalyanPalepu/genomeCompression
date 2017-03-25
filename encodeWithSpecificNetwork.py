@@ -6,7 +6,7 @@ GAPS_COMPRESSION_FACTOR = 100
 GAPS_TRAINING_EPOCHS = 10000
 
 BASES_COMPRESSION_FACTOR = 70
-BASES_TRAINING_EPOCHS = 25000
+BASES_TRAINING_EPOCHS = 15000
 
 
 def getBasesData(filename):
@@ -85,7 +85,7 @@ def decodeData(encodedData, autoEncoder, errorMatrix, leftOverMatrix):
     return decoded, leftOverMatrix
 
 
-def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trainingEpochs, logDirectory='./'):
+def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trainingEpochs, logDirectory='./', regularizationParameter=0):
     """
     Encodes bases/gaps data with an autoencoder
     :param dataInput: input data (number of bases MUST be divisible by segmentLength;use getBasesData())
@@ -108,7 +108,7 @@ def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trai
                               20 if (segmentLength / compressionFactor) < 20 else (segmentLength / compressionFactor))
 
     print "Training autoencoder..."
-    autoEncoder.train([normalizedData], trainingEpochs, logDirectory=logDirectory)
+    autoEncoder.train([normalizedData], trainingEpochs, logDirectory=logDirectory, regularizationParameter=regularizationParameter)
 
     print "Encoding data..."
     encoded = EncodedData(simplify(autoEncoder.encode(normalizedData)), dataInput.min(), dataInput.max())
@@ -120,7 +120,7 @@ def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trai
     return encoded, autoEncoder, errorMatrix, leftOverMatrix
 
 
-def encodeBasesData(dataInput, leftOverMatrix, logDirectory='./'):
+def encodeBasesData(dataInput, leftOverMatrix, logDirectory='./', regularizationParameter=0):
     """
     Encodes bases data using tuned parameters
     :param dataInput: see encodeData()
@@ -129,7 +129,7 @@ def encodeBasesData(dataInput, leftOverMatrix, logDirectory='./'):
     :return: see encodeData()
     """
     return encodeData(dataInput, leftOverMatrix, BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, BASES_TRAINING_EPOCHS,
-                      logDirectory=logDirectory)
+                      logDirectory=logDirectory, regularizationParameter=regularizationParameter)
 
 
 def encodeGapsData(dataInput, leftOverMatrix):
@@ -142,35 +142,44 @@ def encodeGapsData(dataInput, leftOverMatrix):
     return encodeData(dataInput, leftOverMatrix, GAPS_SEGMENT_LENGTH, GAPS_COMPRESSION_FACTOR, GAPS_TRAINING_EPOCHS)
 
 
-def gridSearch(segmentLengths, compressionFactors, regParams):
+def gridSearch(segmentLengths, compressionFactors, regularizationParameters):
     filename = raw_input("Name of the file that will be compressed: ")
-    g = open('massiveGridSearch/gridSearchResults', 'w')
-    for regParam in regParams:
+    g = open('lowRegParam/gridSearchResults', 'w')
+    for regularizationParameter in regularizationParameters:
         for segLen in segmentLengths:
-            for compFac in compressionFactors:
-                print "Trying with {0} for segment length, {1} for compression factor, and {2} for reg param".format(segLen, compFac, regParam)
+            for compressionFactor in compressionFactors:
+                print "Trying with {0} for segment length, {1} for compression factor, and {2} for reg param".format(segLen, compressionFactor, regularizationParameter)
                 BASES_SEGMENT_LENGTH = segLen
-                BASES_COMPRESSION_FACTOR = compFac
-                directoryName = 'massiveGridSearch/' + str(BASES_SEGMENT_LENGTH) + 'x' + str(BASES_COMPRESSION_FACTOR) + '/'
+                BASES_COMPRESSION_FACTOR = compressionFactor
+                directoryName = 'lowRegParam/' + str(BASES_SEGMENT_LENGTH) + 'x' + str(BASES_COMPRESSION_FACTOR) + '/'
                 if not os.path.exists(directoryName):
                     os.mkdir(directoryName)
                 data = getBasesData(filename)
-                encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeBasesData(*data, logDirectory=directoryName, regparam=regParam)
+                encodedData, autoEncoder, errorMatrix, leftOverMatrix = encodeBasesData(*data, logDirectory=directoryName, regularizationParameter=regularizationParameter)
                 decoded = decodeData(encodedData, autoEncoder, errorMatrix, leftOverMatrix)
                 assert np.array_equal(data[0], decoded[0])  # make sure compression was lossless
-                accuracy = 100 - ((len(errorMatrix) / float(decoded[0].size)) * 100)
+                trainAccuracy = 100 - ((len(errorMatrix) / float(decoded[0].size)) * 100)
 
-                g.write("Compressed with {0} size segments, {1}x compression and {2} reg param at {3:.3f} percent accuracy".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, regParam, accuracy))
+                data, leftOverMatrix = getBasesData('/home/kalyanp/hugeData/bases2.b')
+                encoded = EncodedData(simplify(autoEncoder.encode(normalize(data))), data.min(), data.max())
+
+                decoded = decodeData(encoded, autoEncoder, [], leftOverMatrix)[0]
+                errorMatrix = findErrorMatrix(data, decoded)
+
+                decoded = decodeData(encoded, autoEncoder, errorMatrix, leftOverMatrix)
+
+                assert np.array_equal(data, decoded[0])  # make sure compression was lossless
+
+                testAccuracy = 100 - ((len(errorMatrix) / float(decoded[0].size)) * 100)
+
+                g.write("Compressed with {0} size segments, {1}x compression and {2} reg param at {3:.3f} percent train accuracy and {4:.3f} test accuracy".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, regularizationParameter, trainAccuracy, testAccuracy))
                 np.save(directoryName + 'encodedData.npy', encodedData.encoded)
                 np.save(directoryName + 'decoder.npy', autoEncoder.decoderWeights)
                 np.save(directoryName + 'encoder.npy', autoEncoder.encoderWeights)
                 np.save(directoryName + 'errorMatrix.npy', np.asarray(errorMatrix, dtype=np.int8))
                 np.save(directoryName + 'leftOverMatrix.npy', leftOverMatrix.astype(np.int8))
-                f = open(directoryName + 'accuracy', 'w')
-                f.write(str(accuracy))
-                f.close()
 
-                print "Compressed with {0} size segments, {1}x compression and {2} reg param at {3:.3f} percent accuracy".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, regParam, accuracy)
+                print "Compressed with {0} size segments, {1}x compression and {2} reg param at {3:.3f} percent train accuracy and {4:.3f} test accuracy".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, regularizationParameter, trainAccuracy, testAccuracy)
     g.close()
 
 if __name__ == "__main__":
@@ -195,3 +204,26 @@ if __name__ == "__main__":
     np.save(directoryName + 'decoder.npy', autoEncoder.decoderWeights)
     np.save(directoryName + 'errorMatrix.npy', np.asarray(errorMatrix, dtype=np.int8))
     np.save(directoryName + 'leftOverMatrix.npy', leftOverMatrix.astype(np.int8))
+
+    # enc = np.load('lowRegParam/16000x50/encoder.npy')
+    # dec = np.load('lowRegParam/16000x50/decoder.npy')
+    # autoEncoder = AutoEncoder(enc.shape[0], enc.shape[1])
+    # autoEncoder.encoderWeights = enc
+    # autoEncoder.decoderWeights = dec
+    # data, leftOverMatrix = getBasesData('/home/kalyanp/hugeData/bases2.b')
+    #
+    # encoded = EncodedData(simplify(autoEncoder.encode(normalize(data))), data.min(), data.max())
+    #
+    # decoded = decodeData(encoded, autoEncoder, [], leftOverMatrix)[0]
+    # errorMatrix = findErrorMatrix(data, decoded)
+    #
+    # decoded = decodeData(encoded, autoEncoder, errorMatrix, leftOverMatrix)
+    #
+    # assert np.array_equal(data, decoded[0])  # make sure compression was lossless
+    #
+    # accuracy = 100 - ((len(errorMatrix) / float(decoded[0].size)) * 100)
+    # print "Compressed with {0:.3f} percent accuracy".format(accuracy)
+
+
+
+    # gridSearch([16000], [50], [2.0])
