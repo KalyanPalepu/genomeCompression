@@ -23,7 +23,8 @@ def getGapsData(filename):
     f = open(filename)
     for line in f:
         line = line.strip()
-        data[0][0].append([int(line)])
+        if int(line) < 100:
+            data[0][0].append([int(line)])
     f.close()
 
     return np.asarray(data, dtype=np.int8)
@@ -38,10 +39,9 @@ def adjustWithErrorMatrix(reconstructedData, errorMatrix):
 
 def calculateErrorMatrix(originalData, reconstructedData):
     errorMatrix = []
-    originalDataPredictions = np.argmax(originalData[0, 0, :, :], axis=1)
-    errors = np.argwhere(originalDataPredictions != reconstructedData)
+    errors = np.argwhere(originalData[0, 0, :, 0] != reconstructedData)
     for error in errors:
-        errorMatrix.append([error, originalDataPredictions[error]])
+        errorMatrix.append([error, originalData[0, 0, error, 0]])
     return errorMatrix
 
 
@@ -95,7 +95,7 @@ class ConvolutionalAutoEncoder(object):
         self.encodeConvolve = tf.nn.conv2d(self.data, self.encodeConvolveWeights, [1, 1, self.filterStride, 1], padding='VALID')
         self.encodeConvolve = tf.nn.bias_add(self.encodeConvolve, self.encodeConvolveBiases)
         # self.encodeConvolve = tf.nn.softmax(self.encodeConvolve)
-        self.encodeConvolve = tf.nn.relu(self.encodeConvolve)
+        self.encodeConvolve = tf.nn.sigmoid(self.encodeConvolve)
 
         self.decodeConvolve = tf.nn.conv2d_transpose(self.encoded, self.decodeConvolveWeights,
                                                      self.outputShape, [1, 1, self.filterStride, 1],
@@ -148,7 +148,7 @@ class ConvolutionalAutoEncoder(object):
 
         if verifyLossless:
             print "Verifying Losslessness..."
-            assert np.array_equal(adjustWithErrorMatrix(decodeWithoutErrorMatrix, errorMatrix), np.argmax(data[0, 0, :, :], axis=1))
+            assert np.array_equal(adjustWithErrorMatrix(decodeWithoutErrorMatrix, errorMatrix), data[0, 0, :, 0])
 
         return encodedSegments, errorMatrix
 
@@ -173,12 +173,12 @@ class ConvolutionalAutoEncoder(object):
             for segment in encodedSegments[:-1]:
                 segmentsCompleted += 1
                 print "Decoding Segment {0} out of {1}".format(segmentsCompleted, len(encodedSegments))
-                decodedSegment = sess.run(tf.argmax(self.decodeConvolve, 3), feed_dict={self.encoded: segment, self.outputShape: [1, 1, outputSegmentSize, self.numChannels]})
+                decodedSegment = sess.run(tf.squeeze(tf.round(self.decodeConvolve)), feed_dict={self.encoded: segment, self.outputShape: [1, 1, outputSegmentSize, self.numChannels]})
                 decoded[index:(index + outputSegmentSize)] = decodedSegment
                 index += outputSegmentSize
 
             print "Decoding Segment {0} out of {0}".format(len(encodedSegments))
-            decodedSegment = sess.run(tf.argmax(self.decodeConvolve, 3), feed_dict={self.encoded: encodedSegments[-1], self.outputShape: [1, 1, leftoverSegmentSize, self.numChannels]})
+            decodedSegment = sess.run(tf.squeeze(tf.round(self.decodeConvolve)), feed_dict={self.encoded: encodedSegments[-1], self.outputShape: [1, 1, leftoverSegmentSize, self.numChannels]})
             decoded[index:] = decodedSegment
         adjustWithErrorMatrix(decoded, errorMatrix)
 
@@ -197,7 +197,7 @@ class ConvolutionalAutoEncoder(object):
         :return: nothing
         """
         # Convert weights to TensorFlow variable
-        directoryName = "{0}x{1}x{2}".format(self.numFilters, self.filterWidth, self.filterStride)
+        directoryName = "networks/{0}x{1}x{2}".format(self.numFilters, self.filterWidth, self.filterStride)
         if not os.path.exists(directoryName):
             os.makedirs(directoryName + '/weights/final')
         #
@@ -263,22 +263,6 @@ class ConvolutionalAutoEncoder(object):
             accuracy.write(str(avgAccuracy / len(batches)))
 
 
-def normalize(data):
-    """
-    Normalizes data to between 0 and 1
-    :param data: data to be normalized
-    :return: normalized data
-    """
-    return (data - data.min()) / (data.max() - data.min())
-
-def denormalize(data, minValue, maxValue):
-    """
-    Inverse of normalize()
-    :param data: data to be denormalized
-    :return:
-    """
-    return (data * (maxValue - minValue)) + minValue
-
 if __name__ == "__main__":
     filterWidth = GAPS_SEGMENT_LENGTH
     numFilters = GAPS_SEGMENT_LENGTH / compressionRatio
@@ -293,12 +277,12 @@ if __name__ == "__main__":
     filename = raw_input("Name of the file that will be compressed: ")
     originalData = getGapsData(filename)
     ac = ConvolutionalAutoEncoder(filterWidth, numFilters, filterStride)
-    ac.train([originalData], 10000, accuracyCalculationRate=10)
-    # batches = []
-    # leftoverIndex = 0
-    # for i in xrange(batchSize, originalData.shape[2], batchSize):
-    #     batches.append(originalData[:, :, (i - batchSize):i, :])
-    #     leftoverIndex = i
-    # print originalData[:, :, leftoverIndex:, :].shape
-    # print originalData.shape
-    # print batchSize
+    ac.train([originalData], 1000, accuracyCalculationRate=10)
+    compressed, errorMatrix = ac.encode(originalData, originalData.shape[2], verifyLossless=True)
+    directoryName = filename + "compressedSegments".format(numFilters, filterWidth, filterStride)
+    if not os.path.exists(directoryName):
+        os.makedirs(directoryName)
+    for i in xrange(len(compressed)):
+        np.save(directoryName + '/segment{0}.npy'.format(i), compressed[i])
+    np.save(directoryName + '/error.npy', np.asarray(errorMatrix))
+
