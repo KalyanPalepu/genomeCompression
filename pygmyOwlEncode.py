@@ -3,7 +3,7 @@ from crestedOwlPort import *
 
 # tuneable values
 GAPS_COMPRESSION_FACTOR = 60
-GAPS_TRAINING_EPOCHS = 50000#0
+GAPS_TRAINING_EPOCHS = 10000
 
 BASES_COMPRESSION_FACTOR = 70
 BASES_TRAINING_EPOCHS = 25000
@@ -72,10 +72,10 @@ def decodeData(encodedData, autoEncoder, errorMatrix, leftOverMatrix):
     :param leftOverMatrix: see encodeData()
     :return: decoded data and the leftover matrix
     """
-    if encodedData.encoded.shape[1] == 0:
+    if encodedData.shape[1] == 0:
         return np.asarray([[]]), leftOverMatrix
 
-    decoded = np.around(denormalize(autoEncoder.decode(encodedData.encoded), encodedData.minValue, encodedData.maxValue))
+    decoded = np.around(autoEncoder.decode(encodedData))
 
     for i in xrange(len(errorMatrix)):
         row, col, error = errorMatrix[i]
@@ -93,23 +93,21 @@ def encodeData(dataInput, leftOverMatrix, segmentLength, compressionFactor, trai
     :param trainingEpochs: the number of epochs for which the autoencoder trains
     :param batchSize: the size of each batch fed to the autoencoder
     :param logDirectoryName: see AutoEncoder.train()
-    :return: an EncodedData object with the encoded data, the autoencoder used to compress, an error matrix, and the leftover matrix
+    :return: the encoded data, the autoencoder used to compress, an error matrix, and the leftover matrix
     """
     if dataInput.shape[0] < 1:
         print "Data is too small to be compressed.".format(dataInput.shape)
-        return EncodedData(np.asarray([[]]), 0, 1), [], np.ndarray([0, 3]), leftOverMatrix
+        return np.asarray([[]]), [], np.ndarray([0, 3]), leftOverMatrix
 
     print "Normalizing data..."
-    normalizedData = normalize(dataInput)
 
     autoEncoder = AutoEncoder(segmentLength,  20 if (segmentLength / compressionFactor) < 20 else (segmentLength / compressionFactor))
 
     print "Training autoencoder..."
-    autoEncoder.train([normalizedData], trainingEpochs, logDirectory=logDirectory)
+    autoEncoder.train([dataInput], trainingEpochs, logDirectory=logDirectory)
 
     print "Encoding data..."
-    #encoded = EncodedData(simplify(autoEncoder.encode(normalizedData)), dataInput.min(), dataInput.max())
-    encoded = EncodedData(autoEncoder.encode(normalizedData), dataInput.min(), dataInput.max())
+    encoded = autoEncoder.encode(dataInput)
 
     print "Generating error matrix..."
     decoded = decodeData(encoded, autoEncoder, [], leftOverMatrix)[0]
@@ -158,7 +156,7 @@ def gridSearch(segmentLengths, compressionFactors):
             accuracy = 100 - ((len(errorMatrix) / float(decoded[0].size)) * 100)
 
             g.write("Compressed with {0} size segments and {1}x compression at {2:.3f} percent accuracy\n".format(BASES_SEGMENT_LENGTH, BASES_COMPRESSION_FACTOR, accuracy))
-            np.save(directoryName + 'encodedData.npy', encodedData.encoded)
+            np.save(directoryName + 'encodedData.npy', encodedData)
             np.save(directoryName + 'decoder.npy', autoEncoder.decoderWeights)
             np.save(directoryName + 'encoder.npy', autoEncoder.encoderWeights)
             np.save(directoryName + 'errorMatrix.npy', np.asarray(errorMatrix, dtype=np.int8))
@@ -198,7 +196,7 @@ if __name__ == "__main__":
     if not os.path.exists(directoryName):
         os.mkdir(directoryName)
 
-    np.save(directoryName + 'encodedData.npy', encodedData.encoded)
+    np.save(directoryName + 'encodedData.npy', encodedData)
     np.save(directoryName + 'encoder.npy', autoEncoder.encoderWeights)  # not necessary for the final product, but we save it for debugging
     np.save(directoryName + 'decoder.npy', autoEncoder.decoderWeights)
     np.save(directoryName + 'errorMatrix.npy', np.asarray(errorMatrix, dtype=np.int8))

@@ -31,7 +31,7 @@ class AutoEncoder(object):
         :param data:
         :return:
         """
-        return expit(np.dot(data, self.decoderWeights))
+        return np.dot(data, self.decoderWeights)
 
     def train(self, data, epochs, logDirectory='./', regularizationParameter=0):
         """
@@ -49,7 +49,7 @@ class AutoEncoder(object):
         x = tf.placeholder(np.float32, [None, self.inputSize])  # placeholder for training data
 
         encoded = tf.nn.sigmoid(tf.matmul(x, encoderWeightsTF))
-        decoded = tf.nn.sigmoid(tf.matmul(encoded, decoderWeightsTF))
+        decoded = tf.matmul(encoded, decoderWeightsTF)
 
         costFunction = tf.reduce_mean(tf.pow(x - decoded, 2)) + \
                        regularizationParameter / (self.hiddenSize * self.inputSize) * (tf.nn.l2_loss(encoderWeightsTF) + tf.nn.l2_loss(decoderWeightsTF))

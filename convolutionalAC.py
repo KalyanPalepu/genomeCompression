@@ -183,7 +183,7 @@ class ConvolutionalAutoEncoder(object):
         return decoded
 
 
-    def train(self, batches, epochs, saveRate=500, accuracyCalculationRate=4):
+    def train(self, batches, epochs, saveRate=2000, accuracyCalculationRate=4):
         """
         Trains autoencoder to fit the data using TensorFlow
         :param batches: Data that will be trained on (split into an array of batches)
@@ -262,7 +262,7 @@ class ConvolutionalAutoEncoder(object):
 if __name__ == "__main__":
     filterWidth = GAPS_SEGMENT_LENGTH
     numFilters = GAPS_SEGMENT_LENGTH / compressionRatio
-    filterStride = GAPS_SEGMENT_LENGTH  # making this equal to GAPS_SEGMENT_LENGTH will make this perform exactly the same
+    filterStride = GAPS_SEGMENT_LENGTH # making this equal to GAPS_SEGMENT_LENGTH will make this perform exactly the same
                                         # as with the normal autoencoder.  To make the segments overlap, (the goal of the
                                         # convolutional autoencoder), make this less than GAPS_SEGMENT_LENGTH.
                                         # This will decrease the compression ratio by a factor of
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     filename = raw_input("Name of the file that will be compressed: ")
     originalData = getGapsData(filename)
     ac = ConvolutionalAutoEncoder(filterWidth, numFilters, filterStride)
-    ac.train([originalData], 1000, accuracyCalculationRate=10)
+    ac.train([originalData], 500000, accuracyCalculationRate=10)
     compressed, errorMatrix = ac.encode(originalData, originalData.shape[2], verifyLossless=True)
     directoryName = filename + "compressedSegments".format(numFilters, filterWidth, filterStride)
     if not os.path.exists(directoryName):
