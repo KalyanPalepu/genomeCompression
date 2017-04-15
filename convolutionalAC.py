@@ -23,10 +23,8 @@ def getGapsData(filename):
     f = open(filename)
     for line in f:
         line = line.strip()
-        if int(line) < 100:
-            data[0][0].append([int(line)])
+        data[0][0].append([int(line)])
     f.close()
-
     return np.asarray(data, dtype=np.int8)
 
 
@@ -215,8 +213,6 @@ class ConvolutionalAutoEncoder(object):
                 avgAccuracy += accuracy
                 # batchAccuracy.append(accuracy / len(batch))
             print "Pre-Train Accuracy: {0}".format(avgAccuracy / len(batches))
-            floatBatch = batches[0].astype(np.float32)
-            print batches[0].shape
             for epoch in xrange(epochs):
                 start = default_timer()
                 avgCost = 0
