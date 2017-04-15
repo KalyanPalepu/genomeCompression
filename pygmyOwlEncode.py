@@ -3,7 +3,7 @@ from crestedOwlPort import *
 
 # tuneable values
 GAPS_COMPRESSION_FACTOR = 60
-GAPS_TRAINING_EPOCHS = 500000
+GAPS_TRAINING_EPOCHS = 50000#0
 
 BASES_COMPRESSION_FACTOR = 70
 BASES_TRAINING_EPOCHS = 25000
@@ -20,7 +20,7 @@ def getBasesData(filename):
     print "Reading data..."
     lettersToNumbers = {'A': 1.0, 'C': 2.0, 'T': 3.0, 'G': 4.0}
     f = open(filename, 'r')
-    lines = [list(x.strip()) for x in f.readlines()]
+    lines = [list(x.strip()) for x in f.readlines() if x < 100]
     f.close()
     convertedData = []
     # One line contains 2 letters, so we divide segmentLength by 2
